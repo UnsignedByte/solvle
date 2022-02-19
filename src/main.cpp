@@ -2,7 +2,7 @@
 * @Author: UnsignedByte
 * @Date:   2022-02-17 08:41:41
 * @Last Modified by:   UnsignedByte
-* @Last Modified time: 2022-02-17 09:35:17
+* @Last Modified time: 2022-02-18 21:22:16
 */
 
 #include <SFML/Graphics.hpp>
@@ -19,8 +19,6 @@ const sf::Time frameTime = sf::seconds(1.f/60.f);
 
 int main()
 {
-	solver::init();
-
 	// Create the main window
 	sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "Wordless");
 	window.setVerticalSyncEnabled(0);
