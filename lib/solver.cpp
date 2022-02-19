@@ -2,7 +2,7 @@
 * @Author: UnsignedByte
 * @Date:   2022-02-17 09:08:40
 * @Last Modified by:   UnsignedByte
-* @Last Modified time: 2022-02-19 10:42:05
+* @Last Modified time: 2022-02-19 14:45:03
 */
 
 #include "solver.hpp"
@@ -41,8 +41,8 @@ namespace solver {
 		wstate rootstate;
 
 		// allocate a char* string
-		char* salloc (int len, size_t size) {
-			return static_cast<char*>(calloc(len + 1, size));
+		char* salloc (int len) {
+			return static_cast<char*>(calloc(len + 1, sizeof(char)));
 		}
 
 		// Read a file of 5 character strings line by line, returns the number of files.
@@ -55,7 +55,7 @@ namespace solver {
 
 			s = (s + 1) / 6 * 5; // Remove newlines from length
 
-			str = salloc(s, sizeof(char));
+			str = salloc(s);
 
 			for(char* c = str; c - str < s; c += 5) {
 				fgets(c, 6, f); // fgets reads up to size - 1
@@ -75,9 +75,7 @@ namespace solver {
 
 		// count number of occurrences of each letter in the string
 		uint8_t* countchars ( const char* word ) {
-			printf("Test2%lu\n", sizeof(uint8_t));
 			uint8_t* charcounts = static_cast<uint8_t*>(calloc(26, sizeof(uint8_t)));
-			printf("Test3\n");
 
 			for (int j = 0; j < 5; ++j) {
 				(*(charcounts + *(word + j) - 'A'))++; // increment count
@@ -105,7 +103,6 @@ namespace solver {
 			for (int i = 0; i < 26; ++i) *(state + i + rmax) = 5; // 5 is default max
 
 			uint8_t mask = 31;
-			printf("Test\n");
 			uint8_t* counts = countchars(answer);
 
 			// Pass 1: detect green letters
@@ -169,13 +166,13 @@ namespace solver {
 		}
 
 		wstate uwstate( const wstate& ows, const char* guess, const char* answer ) {
-			ows.print();
+			// ows.print();
 			uint8_t* state = gstate(guess, answer);
 
 			wstate ws;
 
-			ws.valid = salloc(ows.lvalid * 5, sizeof(char));
-			ws.solutions = salloc(ows.lsolutions * 5, sizeof(char));
+			ws.valid = salloc(ows.lvalid * 5);
+			ws.solutions = salloc(ows.lsolutions * 5);
 
 			for (int i = 0; i < ows.lvalid; ++i) {
 				ws.lvalid += cmpadd(ws.valid + ws.lvalid * 5, ows.valid + i * 5, state);
@@ -190,26 +187,57 @@ namespace solver {
 			ws.valid = static_cast<char*> (realloc(ws.valid, (ws.lvalid * 5 + 1) * sizeof(char)));
 			ws.solutions = static_cast<char*> (realloc(ws.solutions, (ws.lsolutions * 5 + 1) * sizeof(char)));
 
-			ws.print();
+			// ws.print();
 
 			free(state);
 
 			return ws;
 		}
 
+		uint64_t descend ( FILE* f, const wstate& ws, const char* ans, const int depth ) {
+			if ( depth >= 6 ) {
+				return 0;
+			}
+
+			if ( ws.lsolutions == 1 ) {
+				return 0;
+			}
+
+			uint64_t sum = 0;
+
+			for (int i = 0; i < ws.lvalid; ++i) {
+				wstate nws = uwstate(ws, ws.valid + i * 5, ans);
+
+				sum += descend(f, nws, ans, depth+1) + 1;
+
+				if (depth == 0) {
+					char* c = salloc(5);
+					strncpy(c, ws.valid + i * 5, 5);
+					printf("%d: Guessed %s, sum %lu\n", depth, c, sum);
+					nws.print();
+				}
+
+			}
+
+			return sum;
+		}
 
 /*
 DATA FORMAT
 
-<int L>
-<string s>
-<int L2>
-<string s2>
+<ANSWER>
+<INITIAL VALID><INITIAL SOLS>
+<GUESS>
+<NUM REMAINING VALID><NUM SOLS>
+<SUBGUESS 1>
+<NUM REMAINING VALID><NUM SOLS>
 ...
-<string s>
-<int L2>
+<SUBGUESS N>
+<NUM VALID>
 ...
-<string s>
+<GUESS N>
+<NUM VALID>
+...
 */
 		struct dfsta {
 			const int id; // output filename
@@ -222,17 +250,15 @@ DATA FORMAT
 
 			printf("Starting thread %d. %d words allocated.\n", args.id, args.l);
 
-			// char* fout;
-			// sprintf(fout, "data/tmp/tmp-%d.dat", args.id);
+			const char* fmt = "data/tmp/tmp-%d.dat";
 
-			// FILE* out = fopen(fout, "w");
+			size_t sz = snprintf(NULL, 0, fmt, args.id);
+			char* fout = salloc(sz);
+			snprintf(fout, sz + 1, fmt, args.id);
 
-			const char* ans = "SWILL";
+			FILE* out = fopen(fout, "w");
 
-			wstate nws = uwstate(*args.state, "LOLLY", ans);
-
-			puts(nws.valid);
-			puts(nws.solutions);
+			printf("%lu\n", descend(out, *args.state, "QUILL", 0));
 
 			// if (fclose(out) != 0) {
 			// 	printf("Failed to close tmp file %d after writing.", args.id);
@@ -254,11 +280,11 @@ DATA FORMAT
 
 		strcat(rootstate.valid, rootstate.solutions);
 
-		rootstate.print(true);
+		// rootstate.print(true);
 
 		// reset current guesses
 		pos = 0;
-		words = salloc(30, sizeof(char));
+		words = salloc(30);
 		strcpy(words, "                              "); // fill with spaces
 
 		pthread_t* threads = static_cast<pthread_t*>(malloc(threadcount * sizeof(pthread_t)));
@@ -285,7 +311,7 @@ DATA FORMAT
 
 
 	char* getstate () {
-		char* p = salloc(30, sizeof(char));
+		char* p = salloc(30);
 		return strcpy(p, words);
 	}
 
