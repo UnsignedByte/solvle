@@ -2,7 +2,7 @@
 * @Author: UnsignedByte
 * @Date:   2022-02-17 09:08:40
 * @Last Modified by:   UnsignedByte
-* @Last Modified time: 2022-02-19 14:45:03
+* @Last Modified time: 2022-02-19 23:26:14
 */
 
 #include "solver.hpp"
@@ -74,8 +74,8 @@ namespace solver {
 		}
 
 		// count number of occurrences of each letter in the string
-		uint8_t* countchars ( const char* word ) {
-			uint8_t* charcounts = static_cast<uint8_t*>(calloc(26, sizeof(uint8_t)));
+		uint8_t* countchars ( const char* word, uint8_t* charcounts ) {
+			memset(charcounts, 0, 26);
 
 			for (int j = 0; j < 5; ++j) {
 				(*(charcounts + *(word + j) - 'A'))++; // increment count
@@ -89,21 +89,19 @@ namespace solver {
 		const int rmin = 26 * 2;
 		const int rmax = 26 * 3;
 
-		uint8_t* gstate( const char* guess, const char* answer ) {
+		uint8_t* gstate( uint8_t* state, const char* guess, const char* answer ) {
 			wstate ws;
 			// 4 Parts:
 			// 26 8 bit ints, low 5 bits of each represents whether the nth character must be in that position of the string
 			// 26 8 bit ints, low 5 bits of each represents whether the nth character cant be in that position of the string
 			// 26 8 bit ints, representing minimum count of each letter in ans
 			// 26 8 bit ints, representing maximum count of each letter in ans
-			uint8_t* state = static_cast<uint8_t*>(calloc(26 * 4, sizeof(uint8_t)));
-			// for (int i = 0; i < 26; ++i) *(state + i + rmust) = 0;
-			// for (int i = 0; i < 26; ++i) *(state + i + rcant) = 0;
-			// for (int i = 0; i < 26; ++i) *(state + i + rmin) = 0;
-			for (int i = 0; i < 26; ++i) *(state + i + rmax) = 5; // 5 is default max
+			memset(state, 0, 26 * 3);
+			memset(state + rmax, 5, 26);
 
 			uint8_t mask = 31;
-			uint8_t* counts = countchars(answer);
+			uint8_t* counts = state + 4 * 26;
+			countchars(answer, counts);
 
 			// Pass 1: detect green letters
 			for (int i = 0; i < 5; ++i) {
@@ -135,12 +133,10 @@ namespace solver {
 				}
 			}
 
-			free(counts);
-
 			return state;
 		}
 
-		bool cmpadd ( char* dest, const char* word, const uint8_t* state ) {
+		bool cmpadd ( char* dest, const char* word, uint8_t* state ) {
 			// check greens and yellows
 			for (int i = 0; i < 26; ++i) {
 				for (int j = 0; j < 5; ++j) {
@@ -150,24 +146,23 @@ namespace solver {
 				}
 			}
 
-			uint8_t* counts = countchars(word);
+			uint8_t* counts = state + 4 * 26;
+			countchars(word, counts);
 
 			for (int i = 0; i < 26; ++i) { // deal with min and max counts
 				if (*(counts + i) < *(state + i + rmin) || *(counts + i) > *(state + i + rmax)) {
-					free(counts);
 					return false;
 				}
 			}
 
 			strncpy(dest, word, 5);
 
-			free(counts);
 			return true;
 		}
 
-		wstate uwstate( const wstate& ows, const char* guess, const char* answer ) {
+		wstate uwstate( uint8_t* state, const wstate& ows, const char* guess, const char* answer ) {
 			// ows.print();
-			uint8_t* state = gstate(guess, answer);
+			gstate(state, guess, answer);
 
 			wstate ws;
 
@@ -189,12 +184,10 @@ namespace solver {
 
 			// ws.print();
 
-			free(state);
-
 			return ws;
 		}
 
-		uint64_t descend ( FILE* f, const wstate& ws, const char* ans, const int depth ) {
+		uint64_t descend ( FILE* f, uint8_t* state, const wstate& ws, const char* ans, const int depth ) {
 			if ( depth >= 6 ) {
 				return 0;
 			}
@@ -206,9 +199,9 @@ namespace solver {
 			uint64_t sum = 0;
 
 			for (int i = 0; i < ws.lvalid; ++i) {
-				wstate nws = uwstate(ws, ws.valid + i * 5, ans);
+				wstate nws = uwstate(state, ws, ws.valid + i * 5, ans);
 
-				sum += descend(f, nws, ans, depth+1) + 1;
+				sum += descend(f, state, nws, ans, depth+1) + 1;
 
 				if (depth == 0) {
 					char* c = salloc(5);
@@ -258,11 +251,15 @@ DATA FORMAT
 
 			FILE* out = fopen(fout, "w");
 
-			printf("%lu\n", descend(out, *args.state, "QUILL", 0));
+			uint8_t* state = static_cast<uint8_t*>(calloc(26 * 5, sizeof(uint8_t)));
 
-			// if (fclose(out) != 0) {
-			// 	printf("Failed to close tmp file %d after writing.", args.id);
-			// }
+			printf("%lu\n", descend(out, state, *args.state, "QUILL", 0));
+
+			if (fclose(out) != 0) {
+				printf("Failed to close tmp file %d after writing.", args.id);
+			}
+
+			free(state);
 
 			return nullptr;
 		}
